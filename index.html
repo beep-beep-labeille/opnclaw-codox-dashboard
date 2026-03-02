@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fiverr Agent Ops Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Fiverr Agent Ops Dashboard</h1>
+    <div class="actions">
+      <button id="settingsBtn">Paramètres</button>
+      <button id="importCsvBtn">Importer CSV</button>
+      <input type="file" id="importCsvInput" accept=".csv" hidden />
+      <button id="exportCsvBtn">Exporter CSV</button>
+      <button id="addRowBtn" class="primary">+ Nouvelle entrée</button>
+    </div>
+  </header>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="filters">
+    <input id="search" type="search" placeholder="Rechercher (tous champs)" />
+    <select id="statusFilter">
+      <option value="">Statut: Tous</option>
+    </select>
+    <select id="agentFilter">
+      <option value="">Agent: Tous</option>
+    </select>
+    <button id="syncSheetsBtn">Sync depuis Sheets</button>
+  </section>
+
+  <section>
+    <table id="dataTable">
+      <thead>
+        <tr id="theadRow"></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p class="hint">Astuce: pour connecter Google Sheets, clique sur Paramètres puis colle l’URL CSV publié (lecture) et/ou l’URL Apps Script (écriture).</p>
+  </section>
+
+  <section>
+    <h3>Journal d’activité</h3>
+    <ul id="activityLog" class="activity"></ul>
+  </section>
+
+  <dialog id="rowDialog">
+    <form id="rowForm">
+      <h3 id="dialogTitle">Nouvelle entrée</h3>
+      <div class="grid" id="formGrid"></div>
+      <menu>
+        <button type="reset">Annuler</button>
+        <button type="submit" class="primary">Enregistrer</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog">
+    <form id="settingsForm">
+      <h3>Paramètres</h3>
+      <label>URL Google Sheets (CSV publié) — lecture
+        <input name="sheetsCsvUrl" id="sheetsCsvUrl" placeholder="https://docs.google.com/spreadsheets/d/.../export?format=csv&gid=..." />
+      </label>
+      <label>Colonne statut (optionnel)
+        <input name="statusCol" id="statusCol" placeholder="ex: Statut" />
+      </label>
+      <label>Colonne agent (optionnel)
+        <input name="agentCol" id="agentCol" placeholder="ex: Agent" />
+      </label>
+      <hr />
+      <label>URL Apps Script (Web App) — écriture (optionnel)
+        <input name="appsScriptUrl" id="appsScriptUrl" placeholder="https://script.google.com/macros/s/.../exec" />
+      </label>
+      <label>API Key (optionnel, recommandé)
+        <input name="apiKey" id="apiKey" placeholder="un secret partagé" />
+      </label>
+      <p class="hint">Sans Apps Script, tu peux toujours sync (lecture) + exporter/importer CSV. Avec Apps Script, les modifications du dashboard peuvent pousser vers Sheets, et OpenClaw peut envoyer des events en HTTP.</p>
+      <menu>
+        <button type="reset">Annuler</button>
+        <button type="submit" class="primary">Enregistrer</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
