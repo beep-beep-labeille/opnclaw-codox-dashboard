@@ -271,29 +271,58 @@ function openDialog(index) {
   dlg.showModal();
 }
 
-async function pushRowToAppsScript(action, row, meta = {}) {
+async function pushRowToIngest(row) {
+  // Prefer Netlify ingest endpoint (Supabase write). Falls back to Apps Script if configured.
+  try {
+    const r = await fetch('/.netlify/functions/events-ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey: state.settings.apiKey || undefined,
+        row: {
+          agent: row['Agent'] || row.Agent,
+          platform: row['Plateforme'] || row.Plateforme,
+          source_group: row['Groupe/Source'] || row['Groupe/Source'],
+          post_url: row['URL post/fil'] || row['URL post/fil'],
+          person: row['Personne'] || row.Personne,
+          profile_url: row['Profil'] || row.Profil,
+          action_type: row['Action (commentaire/DM/admin)'] || row.Action,
+          message: row['Message/Commentaire'] || row.Message,
+          status: row['Statut'] || row.Statut,
+          next_action: row['Prochaine action'] || row['Prochaine action'],
+          due_date: row['Échéance'] || row['Echeance'],
+          priority: row['Priorité'] || row.Priorite,
+          product: row['Produit/Gig'] || row.Produit,
+          offer_eur: row['Devis (€)'] || row.Devis,
+          prob_pct: row['Probabilité %'] || row.Probabilite,
+          result: row['Résultat'] || row.Resultat,
+          notes: row['Notes'] || row.Notes,
+        }
+      })
+    });
+    if (r.ok) return await r.json();
+  } catch (e) {
+    // ignore
+  }
+
+  // Apps Script fallback
   const url = state.settings.appsScriptUrl;
   if (!url) return { ok: false, skipped: true };
-
   const payload = {
-    action,
+    action: 'append',
     apiKey: state.settings.apiKey || undefined,
     headers: state.headers,
-    row,
-    meta
+    row
   };
-
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-
   if (!r.ok) {
     const t = await r.text().catch(() => '');
-    throw new Error(`Apps Script error (${r.status}): ${t}`);
+    throw new Error(`Write error (${r.status}): ${t}`);
   }
-
   return r.json().catch(() => ({ ok: true }));
 }
 
@@ -308,24 +337,18 @@ async function saveDialog(e) {
     log('Nouvelle entrée ajoutée');
     render();
     try {
-      await pushRowToAppsScript('append', data);
-      log('Écriture Sheets: OK (append)');
+      await pushRowToIngest(data);
+      log('Écriture: OK');
     } catch (err) {
-      log('Écriture Sheets: échec (voir console)');
+      log('Écriture: échec (voir console)');
       console.error(err);
     }
   } else {
-    const old = state.rows[state.editIndex];
+    // Update in Supabase not implemented in UI yet (needs row ID).
+    // For now we only update locally.
     state.rows[state.editIndex] = data;
-    log('Entrée mise à jour');
+    log('Entrée mise à jour (local)');
     render();
-    try {
-      await pushRowToAppsScript('update', data, { previous: old });
-      log('Écriture Sheets: OK (update)');
-    } catch (err) {
-      log('Écriture Sheets: échec (voir console)');
-      console.error(err);
-    }
   }
 
   document.querySelector('#rowDialog').close();
@@ -412,12 +435,52 @@ function saveSettings(e) {
 }
 
 async function loadInitial() {
-  // If settings has sheetsCsvUrl, we sync. Otherwise try local seed CSV.
+  // Prefer Supabase/Netlify API if present (no credentials in browser)
+  try {
+    const r = await fetch('/.netlify/functions/events-list?limit=500');
+    if (r.ok) {
+      const j = await r.json();
+      if (j && j.ok && Array.isArray(j.rows)) {
+        // Project onto DEFAULT_HEADERS for display
+        state.headers = [...DEFAULT_HEADERS];
+        state.rows = j.rows.map(ev => ({
+          'Date': (ev.event_time || ev.created_at || '').slice(0, 10),
+          'Agent': ev.agent || '',
+          'Plateforme': ev.platform || '',
+          'Groupe/Source': ev.source_group || '',
+          'URL post/fil': ev.post_url || '',
+          'Personne': ev.person || '',
+          'Profil': ev.profile_url || '',
+          'Action (commentaire/DM/admin)': ev.action_type || '',
+          'Message/Commentaire': ev.message || '',
+          'Statut': ev.status || '',
+          'Dernière action': '',
+          'Prochaine action': ev.next_action || '',
+          'Échéance': ev.due_date || '',
+          'Priorité': ev.priority || '',
+          'Produit/Gig': ev.product || '',
+          'Devis (€)': ev.offer_eur ?? '',
+          'Probabilité %': ev.prob_pct ?? '',
+          'Résultat': ev.result || '',
+          'Notes': ev.notes || ''
+        }));
+        buildFilters();
+        render();
+        log('Chargé depuis Supabase');
+        return;
+      }
+    }
+  } catch (e) {
+    // ignore and fallback
+  }
+
+  // Fallback: Google Sheets CSV if configured
   if (state.settings.sheetsCsvUrl) {
     await syncFromSheets();
     return;
   }
 
+  // Fallback: local seed CSV
   try {
     const r = await fetch('../comeup_outreach_dashboard.csv');
     const csv = await r.text();
@@ -425,7 +488,6 @@ async function loadInitial() {
     state.headers = headers.length ? headers : [...DEFAULT_HEADERS];
     state.rows = rows;
   } catch (e) {
-    // empty
     state.rows = [];
   }
 
